@@ -41,7 +41,7 @@ def read_purchases(path):
 
 
 class RecommendationEngine: 
-     def __init__(self, purchases):
+    def __init__(self, purchases):
             self.history = {}
             self.product_name = {}
             self.product_category = {}
@@ -65,21 +65,27 @@ class RecommendationEngine:
                     customers[prodid].add(custid)
                     self.popularity = {pid: len(who) for pid, who in customers.items()}
 
+    def similarity(self, c1, c2):
+        a = self.history[c1]
+        b = self.history[c2]
+        return jaccard(a, b)
+
    
+def jaccard(a: set, b: set) -> float:
+    """|A intersection B| / |A union B|. Returns 0.0 when both sets are empty."""
+    union = a | b
+    if not union:
+        return 0
+    return len(a & b) / len( a | b)
+
 valid, rejected = read_purchases("data/purchases.csv")
 engine = RecommendationEngine(valid)
-print(engine.popularity["P03"])
-print(engine.history)
-print(engine.product_name)
-print(engine.popularity)
-
-
-
-
-          
-valid, rejected = read_purchases("data/purchases.csv")
-print("valid:", len(valid))
-print("rejected:", len(rejected))
-print(rejected)
-
+first_five = list(engine.history)[:5]
+print(first_five)
+for c1 in first_five:
+    row_values = []
+    for c2 in first_five:
+        row_values.append(round(engine.similarity(c1, c2), 2))
+    print(c1, row_values)
+print(engine.similarity("C116", "C120"))
 
