@@ -3,6 +3,8 @@ from pathlib import Path
 
 DATA_PATH = Path("data") / "purchases.csv"
 OUTPUT_PATH = Path("output") / "recommendations.csv"
+POPULARITY_WEIGHT = 0.5
+
 
 with open("data/purchases.csv", encoding="utf-8") as f:
     text = f.read()
@@ -117,9 +119,31 @@ class RecommendationEngine:
             if pid not in own:
                 candidates[pid] = {"supporters": [], "fallback": True}
         return candidates
-   
+
+    
+    def score(self, evidence: dict) -> float:
+        sim_total = sum(sim for _, sim in evidence["supporters"])
+        top = max(self.popularity.values())
+        return sim_total + POPULARITY_WEIGHT * evidence["popularity"] / top
 
 
+    def recommend(self, customer_id: str, n: int = 3) -> list[dict]:
+        candidates = self.candidate_products(customer_id)
+        results = []
+
+        for pid, evidence in candidates.items():
+            evidence["popularity"] = self.popularity[pid]
+            results.append({
+                "product_id": pid,
+                "product_name": self.product_name[pid],
+                "category": self.product_category[pid],
+                "score": round(self.score(evidence), 4),
+            })
+
+        results.sort(key=lambda r: (-r["score"], r["product_id"]))
+        return results[:n]
+
+    
 valid, rejected = read_purchases("data/purchases.csv")
 engine = RecommendationEngine(valid)
 first_five = list(engine._history)[:5]
@@ -135,5 +159,7 @@ print(engine.candidate_products("C116", 3))
 
 
 strict = RecommendationEngine(valid, min_similarity=0.9)
-print(strict.candidate_products("C116", 3))
-
+print(engine.score({"supporters": [("C108", 0.4), ("C120", 0.4)], "popularity": 6}))
+for rec in engine.recommend("C116", 3):
+    print(rec)
+    
