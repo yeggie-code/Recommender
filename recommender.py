@@ -43,6 +43,10 @@ def read_purchases(path):
 class RecommendationEngine: 
      def __init__(self, purchases):
             self.history = {}
+            self.product_name = {}
+            self.product_category = {}
+            self.popularity = {}
+            customers ={}
 
             for row in purchases:
                     custid = row["customer_id"]
@@ -50,12 +54,24 @@ class RecommendationEngine:
                     
                     if custid not in self.history:
                         self.history[custid] = set()
-
                     self.history[custid].add(prodid)
 
+                    self.product_name[prodid] = row["product_name"]
+                    self.product_category[prodid] = row["category"]
+
+                    if prodid not in customers:
+                        customers[prodid] = set()
+                    
+                    customers[prodid].add(custid)
+                    self.popularity = {pid: len(who) for pid, who in customers.items()}
+
+   
 valid, rejected = read_purchases("data/purchases.csv")
 engine = RecommendationEngine(valid)
+print(engine.popularity["P03"])
 print(engine.history)
+print(engine.product_name)
+print(engine.popularity)
 
 
 
