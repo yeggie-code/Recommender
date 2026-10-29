@@ -40,6 +40,27 @@ def read_purchases(path):
         return valid, rejected
 
 
+class RecommendationEngine: 
+     def __init__(self, purchases):
+            self.history = {}
+
+            for row in purchases:
+                    custid = row["customer_id"]
+                    prodid = row["product_id"]
+                    
+                    if custid not in self.history:
+                        self.history[custid] = set()
+
+                    self.history[custid].add(prodid)
+
+valid, rejected = read_purchases("data/purchases.csv")
+engine = RecommendationEngine(valid)
+print(engine.history)
+
+
+
+
+          
 valid, rejected = read_purchases("data/purchases.csv")
 print("valid:", len(valid))
 print("rejected:", len(rejected))
