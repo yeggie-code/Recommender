@@ -94,6 +94,29 @@ class RecommendationEngine:
             scored.append((other, score))
             scored.sort(key=lambda pair: (-pair[1], pair[0]))
         return scored[:k]
+
+    def candidate_products(self, customer_id: str, k: int = 3) -> dict[str, dict]:
+        own = self._history[customer_id]
+        candidates = {}
+
+        for neighbour, similar in self.similar_customers(customer_id, k):
+            new_products = self._history[neighbour] - own
+
+            for pid in new_products:
+                if pid not in candidates:
+                    candidates[pid] = {"supporters": []}
+                candidates[pid]["supporters"].append((neighbour, similar))
+
+        if candidates:
+            return candidates
+
+        own = self._history[customer_id]
+        ranked = sorted(self.popularity.items(), key=lambda item: (-item[1], item[0]))
+
+        for pid, count in ranked:
+            if pid not in own:
+                candidates[pid] = {"supporters": [], "fallback": True}
+        return candidates
    
 
 
@@ -108,4 +131,9 @@ for c1 in first_five:
     print(c1, row_values)
 print(engine.similarity("C116", "C120"))
 print(engine.similar_customers("C116", 3))
+print(engine.candidate_products("C116", 3))
+
+
+strict = RecommendationEngine(valid, min_similarity=0.9)
+print(strict.candidate_products("C116", 3))
 
