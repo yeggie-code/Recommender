@@ -5,11 +5,6 @@ DATA_PATH = Path("data") / "purchases.csv"
 OUTPUT_PATH = Path("output") / "recommendations.csv"
 POPULARITY_WEIGHT = 0.5
 
-
-with open("data/purchases.csv", encoding="utf-8") as f:
-    text = f.read()
-
-
 def read_purchases(path):
     valid = []
     rejected = []
@@ -55,11 +50,13 @@ class RecommendationEngine:
             self.product_name = {}
             self.product_category = {}
             self.popularity = {}
+            self.customer_name = {}
             customers ={}
 
             for row in purchases:
                     custid = row["customer_id"]
                     prodid = row["product_id"]
+                    self.customer_name[custid] = row["customer_name"]
                     
                     if custid not in self._history:
                         self._history[custid] = set()
@@ -76,12 +73,14 @@ class RecommendationEngine:
 
 
     def history(self, customer_id):
+        if customer_id not in self._history:
+            raise KeyError(f"Unknown customer ID: {customer_id}")
         return self._history[customer_id]
 
 
     def similarity(self, c1, c2):
-        a = self._history[c1]
-        b = self._history[c2]
+        a = self.history(c1)
+        b = self.history(c2)
         return jaccard(a, b)
 
     
@@ -98,7 +97,7 @@ class RecommendationEngine:
         return scored[:k]
 
     def candidate_products(self, customer_id: str, k: int = 3) -> dict[str, dict]:
-        own = self._history[customer_id]
+        own = self.history(customer_id)
         candidates = {}
 
         for neighbour, similar in self.similar_customers(customer_id, k):
@@ -112,9 +111,7 @@ class RecommendationEngine:
         if candidates:
             return candidates
 
-        own = self._history[customer_id]
         ranked = sorted(self.popularity.items(), key=lambda item: (-item[1], item[0]))
-
         for pid, count in ranked:
             if pid not in own:
                 candidates[pid] = {"supporters": [], "fallback": True}
@@ -137,29 +134,81 @@ class RecommendationEngine:
                 "product_id": pid,
                 "product_name": self.product_name[pid],
                 "category": self.product_category[pid],
+                "supporting_customers": ";".join(c for c, _ in evidence["supporters"]),
                 "score": round(self.score(evidence), 4),
+
             })
 
         results.sort(key=lambda r: (-r["score"], r["product_id"]))
         return results[:n]
 
-    
-valid, rejected = read_purchases("data/purchases.csv")
-engine = RecommendationEngine(valid)
-first_five = list(engine._history)[:5]
-print(first_five)
-for c1 in first_five:
-    row_values = []
-    for c2 in first_five:
-        row_values.append(round(engine.similarity(c1, c2), 2))
-    print(c1, row_values)
-print(engine.similarity("C116", "C120"))
-print(engine.similar_customers("C116", 3))
-print(engine.candidate_products("C116", 3))
+
+    def recommend_all(self, n: int = 3) -> list[dict]:
+        rows = []
+        for customer_id in sorted(self._history):
+            name = self.customer_name[customer_id]
+            recs = self.recommend(customer_id, n)
+
+            if not recs:
+                rows.append({"customer_id": customer_id, "customer_name": name,
+                             "rank": "", "product_id": "", "product_name": "",
+                             "category": "", "score": "", "supporting_customers": ""})
+                continue
+
+            for rank, rec in enumerate(recs, start=1):
+                rows.append({"customer_id": customer_id, "customer_name": name,
+                             "rank": rank, **rec})
+        return rows
 
 
-strict = RecommendationEngine(valid, min_similarity=0.9)
-print(engine.score({"supporters": [("C108", 0.4), ("C120", 0.4)], "popularity": 6}))
-for rec in engine.recommend("C116", 3):
-    print(rec)
-    
+    def export_csv(self, rows: list[dict], path: Path = OUTPUT_PATH) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        fieldnames = ["customer_id", "customer_name", "rank", "product_id",
+                      "product_name", "category", "score", "supporting_customers"]
+
+        with open(path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            for r in rows:
+                out = dict(r)
+                if out["score"] != "":
+                    out["score"] = f"{out['score']:.3f}"
+                writer.writerow(out)
+
+
+def show_customer(engine, customer_id, n=3):
+    name = engine.customer_name[customer_id]
+    bought = sorted(engine.history(customer_id))
+
+    print(f"Customer {customer_id} ({name}) bought: " + "{" + ", ".join(bought) + "}")
+
+    print("Most similar customers:")
+    for other, sim in engine.similar_customers(customer_id, 3):
+        print(f"  {other}  jaccard={sim:.2f}")
+
+    print("Recommendations:")
+    for i, rec in enumerate(engine.recommend(customer_id, n), start=1):
+        supporters = rec["supporting_customers"]
+        count = len(supporters.split(";")) if supporters else 0
+        if count:
+            reason = f"{count} similar customers bought it"
+        else:
+            reason = "it is popular with all customers"
+        print(f"  {i}. {rec['product_name']} ({rec['category']})  score={rec['score']:.3f}  because {reason}")
+
+def main():
+    valid, rejected = read_purchases(DATA_PATH)
+    engine = RecommendationEngine(valid)
+    rows = engine.recommend_all(3)
+    engine.export_csv(rows)
+
+    written = sum(1 for r in rows if r["product_id"] != "")
+
+    print(f"Purchases read: {len(valid) + len(rejected)} | used: {len(valid)} | rejected: {len(rejected)}")
+    print(f"Customers: {len(engine._history)} | Products: {len(engine.product_name)} | Recommendations written: {written}")
+    show_customer(engine, "C116")
+    print()
+
+if __name__ == "__main__":
+    main()       
